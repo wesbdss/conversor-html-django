@@ -5,10 +5,11 @@ from django.views.generic import TemplateView
 from django.template.loader import render_to_string, get_template, TemplateDoesNotExist
 from django.conf import settings
 from django.utils import timezone
-import os, sys, platform
-from . import models
-from django.views.decorators.csrf import csrf_exempt
-import shutil
+import os, sys
+import logging
+
+root = logging.getLogger()
+root.setLevel(logging.DEBUG)
 # Create your views here.
 
 path_root = os.path.join(settings.BASE_DIR,".templates")
@@ -62,33 +63,31 @@ def conversorView(request):
     return HttpResponse("<br>".join(["<a href='/{}'>{}</a>".format(t.replace(new_directory,""),t.replace(new_directory,"")) for t in templates_dirs]))
 
 def pageView(request):
-    
-    print(">>","pageView")
-    print(request.build_absolute_uri(),os.path.join(path_root,request.path.lstrip('/')))
-    print("__file__ ", __file__)
-    print("path root", path_root)
-    print("dirs", os.listdir(path_root))
+    path_splitted = [x for x in request.path.split("/") if x]
+    path_splitted = [path_root]+path_splitted
+    complete_path = os.path.join(*path_splitted)
+    logging.debug("[Page View] {}".format(complete_path))
     try:
-        if os.path.isdir(os.path.join(path_root,request.path.lstrip('/'))) and os.path.exists(os.path.join(path_root,"index.html")):
+        if os.path.isdir(complete_path) and os.path.exists(os.path.join(path_root,"index.html")):
             template = get_template(os.path.join(path_root,"index.html"))
             return HttpResponse(template.render({"request":request}))
-        template = get_template(request.path.lstrip('/'))
+        template = get_template(request.path.lstrip("/"))
+        print(template)
         return HttpResponse(template.render({"request":request}))
     except Exception as ex:
-        print("--- ERROR ---")
         exc_type, exc_obj, exc_tb = sys.exc_info()
         fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-        print(exc_type, fname, exc_tb.tb_lineno)
-        print(request.path.lstrip('/'))
-        print("Err:", ex)
-        print("--- END ERROR ---")
-        # Return first index.html
+        logging.error("[Page View] {} {} {}".format(exc_type, fname, exc_tb.tb_lineno))
+        logging.error("[Page View] ERR {}".format(ex))
 
     if settings.DEBUG:
-        if not os.path.isdir(str(path_root+request.path.lstrip('/'))) and not str(path_root+request.path.lstrip('/')).endswith(".html"):
-            raise Http404("Não é um diretório {}".format(os.path.isdir(str(path_root+request.path.lstrip('/')))))
-        values = os.listdir(str(path_root+request.path.lstrip('/')))
-        return HttpResponse("<br>".join(["<a href='{}'>{}</a>".format((request.path+"/"+t).replace("//","/"),t) for t in values]))
+        if not str(os.path.join(path_root,request.path)) and not str(os.path.join(path_root,request.path)).endswith(".html"):
+            raise Http404("Não é um diretório {}".format(os.path.isdir(os.path.join(path_root,request.path.lstrip('/')))))
+        values = os.listdir(complete_path)
+        res= []
+        for t in values:
+            res.append("<a style='color:{};' href='{}'>{}</a>".format("green" if t.endswith(".html") else "gray",(request.path+"/"+t).replace("//","/"),t))
+        return HttpResponse("<br>".join(res))
     raise Http404("Template não Encontrado")
             
         
